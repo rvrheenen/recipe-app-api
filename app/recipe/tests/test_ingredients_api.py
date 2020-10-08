@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from core.models import Ingredient
+from core.models import Ingredient, Recipe
 
 from recipe.serializers import IngredientSerializer
 
@@ -83,3 +83,53 @@ class PrivateIngredientsAPITests(TestCase):
         res = self.client.post(INGREDIENTS_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_retrieve_ingredients_assigned_to_recipes(self):
+        """Test filtering ingredients by those assigned to recipes"""
+        ingredient1 = Ingredient.objects.create(user=self.user, name="Sugar")
+        ingredient2 = Ingredient.objects.create(user=self.user, name="Spice")
+
+        recipe = Recipe.objects.create(
+            user=self.user,
+            title="Pancakes",
+            time_minutes=4,
+            price=3.00
+        )
+
+        recipe.ingredients.add(ingredient1)
+
+        res = self.client.get(INGREDIENTS_URL, {'assigned_only': 1})
+
+        serializer1 = IngredientSerializer(ingredient1)
+        serializer2 = IngredientSerializer(ingredient2)
+
+        self.assertIn(serializer1.data, res.data)
+        self.assertNotIn(serializer2.data, res.data)
+
+    def test_retrieve_ingredients_assigned_unique(self):
+        """Test filtering ingredients by assigned returns unique items"""
+        ingredient1 = Ingredient.objects.create(name="Raisins", user=self.user)
+        Ingredient.objects.create(name="Ketchup", user=self.user)
+
+        recipe1 = Recipe.objects.create(
+            user=self.user,
+            title="Something",
+            time_minutes=5,
+            price=5.00
+        )
+        recipe2 = Recipe.objects.create(
+            user=self.user,
+            title="Something else",
+            time_minutes=5,
+            price=5.00
+        )
+
+        recipe1.ingredients.add(ingredient1)
+        recipe2.ingredients.add(ingredient1)
+
+        res = self.client.get(INGREDIENTS_URL, {'assigned_only': 1})
+
+        serializer = IngredientSerializer(ingredient1)
+
+        self.assertIn(serializer.data, res.data)
+        self.assertEqual(len(res.data), 1)
